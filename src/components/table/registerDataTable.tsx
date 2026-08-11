@@ -1,7 +1,7 @@
 import { useRegistration } from "@/contexts/RegistrationContext";
 import { useEffect, useState } from "react";
 import { Button } from "../ui/button";
-import { MoreHorizontal, RefreshCw, Ticket } from "lucide-react";
+import { MoreHorizontal, Ticket } from "lucide-react";
 import { QueueTable } from "../dashboard/queueTable";
 import { registerColumns } from "../dashboard/registerColumns";
 import { Skeleton } from "../ui/skeleton";

@@ -18,7 +18,6 @@ import { Loader2, Ticket } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { getCurrentDateTime } from "@/lib/utils";
 import { useRegistration } from "@/contexts/RegistrationContext";
-// Checkbox removed — vegetarian option dropped
 import {
   Select,
   SelectContent,
@@ -26,8 +25,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { timeslotLimit, CollectionDate } from "@/lib/counterFirestore";
+import { timeslotLimit } from "@/lib/counterFirestore";
 import { sendConfirmationEmail } from "@/lib/emailService";
+import { QUEUE_COLLECTION, CollectionDate } from "@/lib/eventConfig";
 
 const englishNameRegex = /^[A-Za-z\s,\\/]+$/;
 const studentIdRegex = /^\d{7}$/;
@@ -35,18 +35,9 @@ const studentEmailRegex = /^[A-Za-z0-9._%+-]+@sd\.taylors\.edu\.my$/;
 const phoneNumberRegex =
   /^\+?(\d{1,3})?[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}$/;
 
-// Queue: single collection date — 15 Sept 2026, TGH
-const COLLECTION_DATE_OPTIONS: { value: CollectionDate; label: string }[] = [
-  { value: "sept15", label: "15th September 2026 (Tuesday) — Taylor's Grand Hall (TGH)" },
-];
-
-const TIMESLOT_OPTIONS = [
-  { value: "530", label: "5:30 PM" },
-  { value: "630", label: "6:30 PM" },
-  { value: "730", label: "7:30 PM" },
-] as const;
-
-const SLOT_CAP = 450;
+// All date/venue/cap/timeslot values derived from eventConfig — edit there only.
+const SLOT_KEYS = QUEUE_COLLECTION.timeslots.map((t) => t.key) as
+  [typeof QUEUE_COLLECTION.timeslots[0]["key"], ...typeof QUEUE_COLLECTION.timeslots[number]["key"][]];
 
 const formSchema = z.object({
   fullName: z.string().min(3).max(50).regex(englishNameRegex, {
@@ -67,12 +58,10 @@ const formSchema = z.object({
   dateTime: z.string(),
   rank: z.number(),
   collectDetails: z.object({
-    date: z.enum(["sept14", "sept15", "sept17"], {
+    date: z.enum([QUEUE_COLLECTION.dateKey], {
       message: "Collection date is required",
     }),
-    timeslot: z.enum(["530", "630", "730", "500", "600"], {
-      message: "Timeslot is required",
-    }),
+    timeslot: z.enum(SLOT_KEYS, { message: "Timeslot is required" }),
   }),
   queuingStatus: z.enum(["queuing", "cancelled", "collected"]),
   ticketNumber: z.string().nullable(),
@@ -94,8 +83,8 @@ export const QueueForm = () => {
       dateTime: getCurrentDateTime(),
       rank: counterData?.queueCount || 0,
       collectDetails: {
-        date: "sept15",
-        timeslot: "530",
+        date: QUEUE_COLLECTION.dateKey,
+        timeslot: QUEUE_COLLECTION.timeslots[0].key,
       },
       queuingStatus: "queuing",
       ticketNumber: null,
@@ -105,9 +94,9 @@ export const QueueForm = () => {
   const selectedDate = form.watch("collectDetails.date") as CollectionDate | undefined;
 
   const getSlotsLeft = (date: CollectionDate | undefined, timeslot: string): number => {
-    if (!date || !timeslotData) return SLOT_CAP;
-    const slotCount = timeslotData[date]?.[timeslot as "530" | "630" | "730"]?.count || 0;
-    return Math.max(0, SLOT_CAP - slotCount);
+    if (!date || !timeslotData) return QUEUE_COLLECTION.slotCap;
+    const slotCount = (timeslotData[date]?.[timeslot] as { count?: number } | undefined)?.count || 0;
+    return Math.max(0, QUEUE_COLLECTION.slotCap - slotCount);
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
@@ -227,14 +216,14 @@ export const QueueForm = () => {
             )}
           />
 
-          {/* Collection Date — fixed to 15 Sept 2026, TGH */}
+          {/* Collection Date — derived from QUEUE_COLLECTION in eventConfig */}
           <FormItem className="space-y-1">
             <FormLabel>Collection Date</FormLabel>
             <div className="rounded-md border px-3 py-2 text-sm bg-muted text-muted-foreground">
-              Tuesday, 15th September 2026 — Taylor's Grand Hall (TGH)
+              {QUEUE_COLLECTION.dateLabel} — {QUEUE_COLLECTION.venue}
             </div>
             <p className="text-xs text-muted-foreground">
-              Collect your physical ticket before the event on 18th September 2026.
+              Collect your physical ticket before the event on {QUEUE_COLLECTION.dateLabel}.
             </p>
           </FormItem>
 
@@ -252,9 +241,9 @@ export const QueueForm = () => {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {TIMESLOT_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label} ({getSlotsLeft(selectedDate, opt.value)} slots left)
+                    {QUEUE_COLLECTION.timeslots.map((opt) => (
+                      <SelectItem key={opt.key} value={opt.key}>
+                        {opt.label} ({getSlotsLeft(selectedDate, opt.key)} slots left)
                       </SelectItem>
                     ))}
                   </SelectContent>

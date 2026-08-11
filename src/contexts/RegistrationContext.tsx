@@ -10,21 +10,26 @@ import {
   getQueueCount,
   CounterDataType,
   DateSlotData,
-  CollectionDate,
   getTimeslotCount,
 } from "@/lib/counterFirestore";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebaseConfig";
 import { fetchWaitData } from "@/lib/waitFirestore";
 import { fetchRegisterData, RegisterData } from "@/lib/registerFirestore";
+import {
+  CollectionDate,
+  QUEUE_COLLECTION,
+  WAITLIST_COLLECTION,
+} from "@/lib/eventConfig";
 
-// All 3 collection dates
-const COLLECTION_DATES: CollectionDate[] = ["sept14", "sept15", "sept17"];
+// Derived from eventConfig — add/remove dates there, not here
+const COLLECTION_DATES: CollectionDate[] = [
+  QUEUE_COLLECTION.dateKey,
+  WAITLIST_COLLECTION.dateKey,
+];
 
-// Timeslot data keyed by collection date
-export type AllTimeslotData = {
-  [K in CollectionDate]: DateSlotData;
-};
+// Timeslot data keyed by collection date — only the two active dates
+export type AllTimeslotData = Record<CollectionDate, DateSlotData>;
 
 interface RegistrationContextType {
   queueData: QueueData[] | null;
@@ -54,12 +59,6 @@ export const useRegistration = (): RegistrationContextType => {
   }
   return context;
 };
-
-const emptyDateSlot = (): DateSlotData => ({
-  "530": { count: 0, studentId: [] },
-  "630": { count: 0, studentId: [] },
-  "730": { count: 0, studentId: [] },
-});
 
 export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -99,8 +98,8 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
       setCounterData(queueCount);
       const queuing = queueCount?.queueCount || 0;
       const waiting = queueCount?.waitingCount || 0;
-      setQueueLimit(queuing > 1350); // true if full
-      setWaitLimit(waiting > 500);   // true if full
+      setQueueLimit(queuing >= 1350);
+      setWaitLimit(waiting >= 500);
     } catch (error) {
       console.error("Error fetching counter data:", error);
     }
@@ -111,11 +110,11 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
       const results = await Promise.all(
         COLLECTION_DATES.map((date) => getTimeslotCount(date)),
       );
-      setTimeslotData({
-        sept14: results[0] || emptyDateSlot(),
-        sept15: results[1] || emptyDateSlot(),
-        sept17: results[2] || emptyDateSlot(),
-      });
+      const entries = COLLECTION_DATES.map((date, i) => [
+        date,
+        results[i] ?? {},
+      ]);
+      setTimeslotData(Object.fromEntries(entries) as AllTimeslotData);
     } catch (error) {
       console.error("Error fetching timeslot data:", error);
     }
@@ -140,8 +139,8 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
           setCounterData(docSnapshot.data() as CounterDataType);
           const queuing = docSnapshot.data().queueCount;
           const waiting = docSnapshot.data().waitingCount;
-          setQueueLimit(queuing > 1350);
-          setWaitLimit(waiting > 500);
+          setQueueLimit(queuing >= 1350);
+          setWaitLimit(waiting >= 500);
         } else {
           console.log("counter update doc not found");
         }
@@ -151,7 +150,7 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
       },
     );
 
-    // Per-date timeslot snapshot listeners
+    // Per-date timeslot snapshot listeners — only for active collection dates
     const unsubDateListeners = COLLECTION_DATES.map((date) => {
       const dateRef = doc(db, "counter", date);
       return onSnapshot(
@@ -160,11 +159,11 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
           if (docSnapshot.exists()) {
             const data = docSnapshot.data() as DateSlotData;
             setTimeslotData((prev) => ({
-              sept14: prev?.sept14 || emptyDateSlot(),
-              sept15: prev?.sept15 || emptyDateSlot(),
-              sept17: prev?.sept17 || emptyDateSlot(),
+              ...Object.fromEntries(
+                COLLECTION_DATES.map((d) => [d, prev?.[d] ?? {}]),
+              ),
               [date]: data,
-            }));
+            } as AllTimeslotData));
           } else {
             console.log(`${date} timeslot document not found.`);
           }

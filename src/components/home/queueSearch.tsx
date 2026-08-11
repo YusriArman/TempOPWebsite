@@ -7,18 +7,7 @@ import { Check, Search, X } from "lucide-react";
 
 const studentIdRegex = /^\d{7}$/;
 
-// Human-readable labels for collection dates
-const DATE_LABELS: Record<string, string> = {
-  sept14: "14th September 2026",
-  sept15: "15th September 2026",
-  sept17: "17th September 2026",
-};
-
-const TIME_LABELS: Record<string, string> = {
-  "530": "5:30 PM",
-  "630": "6:30 PM",
-  "730": "7:30 PM",
-};
+import { DATE_LABELS, TIME_LABELS, VENUE_BY_DATE } from "@/lib/eventConfig";
 
 const QueueSearch = () => {
   const [studentId, setStudentId] = useState<string>("");
@@ -71,13 +60,14 @@ const QueueSearch = () => {
   };
 
   const collectionDetails = (data: QueueData) => {
-    const dateLabel = DATE_LABELS[data.collectDetails.date] ?? data.collectDetails.date;
-    const timeLabel = TIME_LABELS[data.collectDetails.timeslot] ?? data.collectDetails.timeslot;
+    const dateLabel  = DATE_LABELS[data.collectDetails.date]     ?? data.collectDetails.date;
+    const timeLabel  = TIME_LABELS[data.collectDetails.timeslot] ?? data.collectDetails.timeslot;
+    const venueLabel = VENUE_BY_DATE[data.collectDetails.date]   ?? "Taylor's Grand Hall (TGH)";
     return (
       <>
         <p>Collection date: {dateLabel}</p>
         <p>Collection time: {timeLabel}</p>
-        <p>Collection venue: Taylor's Grand Hall (TGH)</p>
+        <p>Collection venue: {venueLabel}</p>
       </>
     );
   };

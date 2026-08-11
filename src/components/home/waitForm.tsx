@@ -17,7 +17,6 @@ import { Loader2, Ticket } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { getCurrentDateTime } from "@/lib/utils";
 import { useRegistration } from "@/contexts/RegistrationContext";
-// Checkbox removed — vegetarian option dropped
 import {
   Select,
   SelectContent,
@@ -25,9 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { timeslotLimit, CollectionDate } from "@/lib/counterFirestore";
+import { timeslotLimit } from "@/lib/counterFirestore";
 import { storeWaitData } from "@/lib/waitFirestore";
 import { sendConfirmationEmail } from "@/lib/emailService";
+import { WAITLIST_COLLECTION, CollectionDate } from "@/lib/eventConfig";
 
 const englishNameRegex = /^[A-Za-z\s,\\/]+$/;
 const studentIdRegex = /^\d{7}$/;
@@ -35,17 +35,9 @@ const studentEmailRegex = /^[A-Za-z0-9._%+-]+@sd\.taylors\.edu\.my$/;
 const phoneNumberRegex =
   /^\+?(\d{1,3})?[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}$/;
 
-// Waitlist: single collection date — 17 Sept 2026, LT1
-const COLLECTION_DATE_OPTIONS: { value: CollectionDate; label: string }[] = [
-  { value: "sept17", label: "17th September 2026 (Thursday) — Lecture Theatre 1 (LT1)" },
-];
-
-const TIMESLOT_OPTIONS = [
-  { value: "500", label: "5:00 PM" },
-  { value: "600", label: "6:00 PM" },
-] as const;
-
-const SLOT_CAP = 250;
+// All date/venue/cap/timeslot values derived from eventConfig — edit there only.
+const SLOT_KEYS = WAITLIST_COLLECTION.timeslots.map((t) => t.key) as
+  [typeof WAITLIST_COLLECTION.timeslots[0]["key"], ...typeof WAITLIST_COLLECTION.timeslots[number]["key"][]];
 
 const formSchema = z.object({
   fullName: z.string().min(3).max(50).regex(englishNameRegex, {
@@ -66,12 +58,10 @@ const formSchema = z.object({
   dateTime: z.string(),
   rank: z.number(),
   collectDetails: z.object({
-    date: z.enum(["sept14", "sept15", "sept17"], {
+    date: z.enum([WAITLIST_COLLECTION.dateKey], {
       message: "Collection date is required",
     }),
-    timeslot: z.enum(["530", "630", "730", "500", "600"], {
-      message: "Timeslot is required",
-    }),
+    timeslot: z.enum(SLOT_KEYS, { message: "Timeslot is required" }),
   }),
   queuingStatus: z.enum(["queuing", "waiting", "cancelled", "collected"]),
   ticketNumber: z.string().nullable(),
@@ -93,8 +83,8 @@ export const WaitForm = () => {
       dateTime: getCurrentDateTime(),
       rank: counterData?.waitingCount || 0,
       collectDetails: {
-        date: "sept17",
-        timeslot: "500",
+        date: WAITLIST_COLLECTION.dateKey,
+        timeslot: WAITLIST_COLLECTION.timeslots[0].key,
       },
       queuingStatus: "waiting",
       ticketNumber: null,
@@ -104,9 +94,9 @@ export const WaitForm = () => {
   const selectedDate = form.watch("collectDetails.date") as CollectionDate | undefined;
 
   const getSlotsLeft = (date: CollectionDate | undefined, timeslot: string): number => {
-    if (!date || !timeslotData) return SLOT_CAP;
-    const slotCount = timeslotData[date]?.[timeslot as "500" | "600"]?.count || 0;
-    return Math.max(0, SLOT_CAP - slotCount);
+    if (!date || !timeslotData) return WAITLIST_COLLECTION.slotCap;
+    const slotCount = (timeslotData[date]?.[timeslot] as { count?: number } | undefined)?.count || 0;
+    return Math.max(0, WAITLIST_COLLECTION.slotCap - slotCount);
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
@@ -226,11 +216,11 @@ export const WaitForm = () => {
             )}
           />
 
-          {/* Collection Date — fixed to 17 Sept 2026, LT1 (waitlist) */}
+          {/* Collection Date — derived from WAITLIST_COLLECTION in eventConfig */}
           <FormItem className="space-y-1">
             <FormLabel>Collection Date</FormLabel>
             <div className="rounded-md border px-3 py-2 text-sm bg-muted text-muted-foreground">
-              Thursday, 17th September 2026 — Lecture Theatre 1 (LT1)
+              {WAITLIST_COLLECTION.dateLabel} — {WAITLIST_COLLECTION.venue}
             </div>
             <p className="text-xs text-muted-foreground">
               You will be notified via email if a spot becomes available.
@@ -251,9 +241,9 @@ export const WaitForm = () => {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {TIMESLOT_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label} ({getSlotsLeft(selectedDate, opt.value)} slots left)
+                    {WAITLIST_COLLECTION.timeslots.map((opt) => (
+                      <SelectItem key={opt.key} value={opt.key}>
+                        {opt.label} ({getSlotsLeft(selectedDate, opt.key)} slots left)
                       </SelectItem>
                     ))}
                   </SelectContent>

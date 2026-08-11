@@ -1,6 +1,5 @@
 import {
   updateTimeslot,
-  updateVegetarianCounter,
   updateWaitingCounter,
   updateWaitingToQueueCounter,
 } from "./counterFirestore";
@@ -23,7 +22,6 @@ export const storeWaitData = async (queueData: QueueData): Promise<void> => {
     studentEmail,
     personalEmail,
     phoneNumber,
-    vegetarian,
     dateTime,
     rank,
     collectDetails,
@@ -32,7 +30,7 @@ export const storeWaitData = async (queueData: QueueData): Promise<void> => {
   } = queueData;
 
   const queueRef = doc(db, "queue", studentId);
-  const waitRef = doc(db, "wait", studentId);
+  const waitRef  = doc(db, "wait",  studentId);
 
   try {
     const queueSnap = await getDoc(queueRef);
@@ -51,7 +49,6 @@ export const storeWaitData = async (queueData: QueueData): Promise<void> => {
       studentEmail,
       personalEmail,
       phoneNumber,
-      vegetarian,
       dateTime,
       rank,
       collectDetails,
@@ -60,7 +57,6 @@ export const storeWaitData = async (queueData: QueueData): Promise<void> => {
     });
 
     console.log("document updated successfully");
-    if (queueData.vegetarian) await updateVegetarianCounter(1);
     await updateWaitingCounter(1);
     await updateTimeslot(
       queueData.collectDetails.date,
@@ -89,7 +85,6 @@ export const fetchWaitData = async (): Promise<QueueData[]> => {
         studentEmail: data.studentEmail,
         personalEmail: data.personalEmail,
         phoneNumber: data.phoneNumber,
-        vegetarian: data.vegetarian,
         dateTime: data.dateTime,
         rank: data.rank,
         collectDetails: data.collectDetails,
@@ -108,7 +103,7 @@ export const cancelWaitTicket = async (
   studentId: string,
   email: string,
 ): Promise<void> => {
-  const waitRef = doc(db, "wait", studentId);
+  const waitRef   = doc(db, "wait",   studentId);
   const cancelRef = doc(db, "cancel", "waiting");
 
   try {
@@ -121,7 +116,7 @@ export const cancelWaitTicket = async (
 
       await updateDoc(cancelRef, {
         studentEmail: arrayUnion(email),
-        studentId: arrayUnion(studentId),
+        studentId:    arrayUnion(studentId),
       });
       console.log(`${email} & ${studentId} added to cancel collection`);
     } else {

@@ -1,4 +1,3 @@
-import React from "react";
 import { useRegistration } from "@/contexts/RegistrationContext";
 import {
   ArrowRight,

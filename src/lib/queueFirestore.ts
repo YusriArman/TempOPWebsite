@@ -1,8 +1,6 @@
 import {
   updateQueueCounter,
   updateTimeslot,
-  updateVegetarianCounter,
-  CollectionDate,
 } from "./counterFirestore";
 import { db } from "./firebaseConfig";
 import {
@@ -14,6 +12,7 @@ import {
   getDocs,
   arrayUnion,
 } from "firebase/firestore";
+import { CollectionDate, TimeslotKey } from "./eventConfig";
 
 export interface QueueData {
   fullName: string;
@@ -21,12 +20,11 @@ export interface QueueData {
   studentEmail: string;
   personalEmail: string;
   phoneNumber: string;
-  vegetarian: boolean;
   dateTime: string;
   rank: number;
   collectDetails: {
-    timeslot: "530" | "630" | "730";
-    date: CollectionDate; // "sept14" | "sept15" | "sept17"
+    timeslot: TimeslotKey;
+    date: CollectionDate;
   };
   queuingStatus: "queuing" | "waiting" | "cancelled" | "collected";
   ticketNumber: string | null;
@@ -39,7 +37,6 @@ export const storeQueueData = async (queueData: QueueData): Promise<void> => {
     studentEmail,
     personalEmail,
     phoneNumber,
-    vegetarian,
     dateTime,
     rank,
     collectDetails,
@@ -62,7 +59,6 @@ export const storeQueueData = async (queueData: QueueData): Promise<void> => {
       studentEmail,
       personalEmail,
       phoneNumber,
-      vegetarian,
       dateTime,
       rank,
       collectDetails,
@@ -71,7 +67,6 @@ export const storeQueueData = async (queueData: QueueData): Promise<void> => {
     });
 
     console.log("document updated successfully");
-    if (queueData.vegetarian) await updateVegetarianCounter(1);
     await updateQueueCounter(1);
     await updateTimeslot(
       queueData.collectDetails.date,
@@ -100,7 +95,6 @@ export const fetchQueueData = async (): Promise<QueueData[]> => {
         studentEmail: data.studentEmail,
         personalEmail: data.personalEmail,
         phoneNumber: data.phoneNumber,
-        vegetarian: data.vegetarian,
         dateTime: data.dateTime,
         rank: data.rank,
         collectDetails: data.collectDetails,
