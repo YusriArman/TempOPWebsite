@@ -37,11 +37,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const logout = async () => await firebaseSignOut(auth);
 
   useEffect(() => {
+    // Fallback: if Firebase Auth doesn't resolve in 2s (e.g. no valid credentials),
+    // stop blocking the UI so we can test the interface.
+    const timeout = setTimeout(() => setLoading(false), 2000);
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      clearTimeout(timeout);
       setCurrentUser(user);
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      unsubscribe();
+    };
   }, []);
 
   const value = {

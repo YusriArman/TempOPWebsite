@@ -59,16 +59,16 @@ const Dashboard = () => {
           className="flex"
         >
           <ToggleGroupItem value="queue" className="w-full flex flex-col">
-            18th
+            14–17 Sept
             <div className="font-semibold">Queue</div>
           </ToggleGroupItem>
           <ToggleGroupItem value="wait" className="w-full flex flex-col">
-            19th
-            <div className="font-semibold">Wait</div>
+            Waiting
+            <div className="font-semibold">Waitlist</div>
           </ToggleGroupItem>
           <ToggleGroupItem value="register" className="w-full flex flex-col">
-            20th
-            <div className="font-semibold">Register</div>
+            Day Of
+            <div className="font-semibold">Registered</div>
           </ToggleGroupItem>
           <DropdownMenu>
             <DropdownMenuTrigger className="w-full rounded-lg border px-4 py-2 font-medium italic hover:bg-gray-100">

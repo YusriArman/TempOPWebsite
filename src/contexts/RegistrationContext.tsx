@@ -9,13 +9,22 @@ import { fetchQueueData, QueueData } from "@/lib/queueFirestore";
 import {
   getQueueCount,
   CounterDataType,
-  VenueData,
+  DateSlotData,
+  CollectionDate,
   getTimeslotCount,
 } from "@/lib/counterFirestore";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebaseConfig";
 import { fetchWaitData } from "@/lib/waitFirestore";
 import { fetchRegisterData, RegisterData } from "@/lib/registerFirestore";
+
+// All 3 collection dates
+const COLLECTION_DATES: CollectionDate[] = ["sept14", "sept15", "sept17"];
+
+// Timeslot data keyed by collection date
+export type AllTimeslotData = {
+  [K in CollectionDate]: DateSlotData;
+};
 
 interface RegistrationContextType {
   queueData: QueueData[] | null;
@@ -24,7 +33,7 @@ interface RegistrationContextType {
   refreshWaitData: () => Promise<void>;
   counterData: CounterDataType | null;
   refreshCounterData: () => Promise<void>;
-  timeslotData: { [key in "TGH" | "LT1"]: VenueData } | null;
+  timeslotData: AllTimeslotData | null;
   refreshTimeslotData: () => Promise<void>;
   queueLimit: boolean;
   waitLimit: boolean;
@@ -46,17 +55,22 @@ export const useRegistration = (): RegistrationContextType => {
   return context;
 };
 
+const emptyDateSlot = (): DateSlotData => ({
+  "530": { count: 0, studentId: [] },
+  "630": { count: 0, studentId: [] },
+  "730": { count: 0, studentId: [] },
+});
+
 export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [queueData, setQueueData] = useState<QueueData[] | null>(null);
   const [waitingData, setWaitingData] = useState<QueueData[] | null>(null);
   const [counterData, setCounterData] = useState<CounterDataType | null>(null);
-  const [timeslotData, setTimeslotData] = useState<
-    { [key in "TGH" | "LT1"]: VenueData } | null
-  >(null);
-  const [queueLimit, setQueueLimit] = useState<boolean>(true);
-  const [waitLimit, setWaitLimit] = useState<boolean>(true);
+  const [timeslotData, setTimeslotData] = useState<AllTimeslotData | null>(null);
+  // Default false = queue is open. Firebase will update if connected.
+  const [queueLimit, setQueueLimit] = useState<boolean>(false);
+  const [waitLimit, setWaitLimit] = useState<boolean>(false);
   const [registrationData, setRegistrationData] = useState<
     RegisterData[] | null
   >(null);
@@ -75,7 +89,7 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
       const allWaitingData = await fetchWaitData();
       setWaitingData(allWaitingData);
     } catch (error) {
-      console.error("Error fetching queue data:", error);
+      console.error("Error fetching wait data:", error);
     }
   }, []);
 
@@ -86,7 +100,7 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
       const queuing = queueCount?.queueCount || 0;
       const waiting = queueCount?.waitingCount || 0;
       setQueueLimit(queuing > 1350); // true if full
-      setWaitLimit(waiting > 500); // true if full
+      setWaitLimit(waiting > 500);   // true if full
     } catch (error) {
       console.error("Error fetching counter data:", error);
     }
@@ -94,22 +108,16 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const refreshTimeslotData = useCallback(async () => {
     try {
-      const tghTimeslot = await getTimeslotCount("TGH");
-      const lt1Timeslot = await getTimeslotCount("LT1");
-
+      const results = await Promise.all(
+        COLLECTION_DATES.map((date) => getTimeslotCount(date)),
+      );
       setTimeslotData({
-        TGH: tghTimeslot || {
-          "530": { count: 0, studentId: [] },
-          "630": { count: 0, studentId: [] },
-          "730": { count: 0, studentId: [] },
-        },
-        LT1: lt1Timeslot || {
-          "5": { count: 0, studentId: [] },
-          "6": { count: 0, studentId: [] },
-        },
+        sept14: results[0] || emptyDateSlot(),
+        sept15: results[1] || emptyDateSlot(),
+        sept17: results[2] || emptyDateSlot(),
       });
     } catch (error) {
-      console.error("Error fetching timeslot data", error);
+      console.error("Error fetching timeslot data:", error);
     }
   }, []);
 
@@ -123,17 +131,17 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   useEffect(() => {
-    // counter listener
-    const docRef = doc(db, "counter", "count");
-    const unsub = onSnapshot(
-      docRef,
+    // Counter snapshot listener
+    const counterRef = doc(db, "counter", "count");
+    const unsubCounter = onSnapshot(
+      counterRef,
       (docSnapshot) => {
         if (docSnapshot.exists()) {
           setCounterData(docSnapshot.data() as CounterDataType);
           const queuing = docSnapshot.data().queueCount;
           const waiting = docSnapshot.data().waitingCount;
-          setQueueLimit(queuing > 1350); // true if full
-          setWaitLimit(waiting > 500); // true if full
+          setQueueLimit(queuing > 1350);
+          setWaitLimit(waiting > 500);
         } else {
           console.log("counter update doc not found");
         }
@@ -143,61 +151,33 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
       },
     );
 
-    // TGH timeslot listener
-    const tghRef = doc(db, "counter", "TGH");
-    const unsubTGH = onSnapshot(
-      tghRef,
-      (docSnapshot) => {
-        if (docSnapshot.exists()) {
-          const tghData = docSnapshot.data() as VenueData;
-          setTimeslotData((prevData) => ({
-            ...(prevData || {
-              LT1: {
-                "5": { count: 0, studentId: [] },
-                "6": { count: 0, studentId: [] },
-              },
-            }), // Spread the previous data for LT1 if exists
-            TGH: tghData, // Only update TGH data
-          }));
-        } else {
-          console.log("TGH document not found.");
-        }
-      },
-      (error) => {
-        console.error("Error listening to TGH timeslot updates:", error);
-      },
-    );
-
-    // LT1 timeslot listener
-    const lt1Ref = doc(db, "counter", "LT1");
-    const unsubLT1 = onSnapshot(
-      lt1Ref,
-      (docSnapshot) => {
-        if (docSnapshot.exists()) {
-          const lt1Data = docSnapshot.data() as VenueData;
-          setTimeslotData((prevData) => ({
-            ...(prevData || {
-              TGH: {
-                "530": { count: 0, studentId: [] },
-                "630": { count: 0, studentId: [] },
-                "730": { count: 0, studentId: [] },
-              },
-            }),
-            LT1: lt1Data, // Update only LT1 data
-          }));
-        } else {
-          console.log("LT1 document not found.");
-        }
-      },
-      (error) => {
-        console.error("Error listening to LT1 timeslot updates:", error);
-      },
-    );
+    // Per-date timeslot snapshot listeners
+    const unsubDateListeners = COLLECTION_DATES.map((date) => {
+      const dateRef = doc(db, "counter", date);
+      return onSnapshot(
+        dateRef,
+        (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            const data = docSnapshot.data() as DateSlotData;
+            setTimeslotData((prev) => ({
+              sept14: prev?.sept14 || emptyDateSlot(),
+              sept15: prev?.sept15 || emptyDateSlot(),
+              sept17: prev?.sept17 || emptyDateSlot(),
+              [date]: data,
+            }));
+          } else {
+            console.log(`${date} timeslot document not found.`);
+          }
+        },
+        (error) => {
+          console.error(`Error listening to ${date} timeslot updates:`, error);
+        },
+      );
+    });
 
     return () => {
-      unsub(); // Clean up listener
-      unsubTGH();
-      unsubLT1();
+      unsubCounter();
+      unsubDateListeners.forEach((unsub) => unsub());
     };
   }, []);
 

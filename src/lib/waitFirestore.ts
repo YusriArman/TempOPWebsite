@@ -59,11 +59,11 @@ export const storeWaitData = async (queueData: QueueData): Promise<void> => {
       ticketNumber,
     });
 
-    console.log("documented updated successfully");
+    console.log("document updated successfully");
     if (queueData.vegetarian) await updateVegetarianCounter(1);
     await updateWaitingCounter(1);
     await updateTimeslot(
-      queueData.collectDetails.venue,
+      queueData.collectDetails.date,
       1,
       queueData.studentId,
       collectDetails.timeslot,

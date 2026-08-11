@@ -7,6 +7,19 @@ import { Check, Search, X } from "lucide-react";
 
 const studentIdRegex = /^\d{7}$/;
 
+// Human-readable labels for collection dates
+const DATE_LABELS: Record<string, string> = {
+  sept14: "14th September 2026",
+  sept15: "15th September 2026",
+  sept17: "17th September 2026",
+};
+
+const TIME_LABELS: Record<string, string> = {
+  "530": "5:30 PM",
+  "630": "6:30 PM",
+  "730": "7:30 PM",
+};
+
 const QueueSearch = () => {
   const [studentId, setStudentId] = useState<string>("");
   const [result, setResult] = useState<QueueData | null>(null);
@@ -37,7 +50,7 @@ const QueueSearch = () => {
       return (
         <div className="flex items-center">
           <Check className="bg-yellow-500 w-4 h-4 mr-1" />
-          Queuing
+          {status === "waiting" ? "Waiting List" : "Queuing"}
         </div>
       );
     } else if (status === "collected") {
@@ -57,14 +70,14 @@ const QueueSearch = () => {
     }
   };
 
-  const collectionDetails = (venue: string, timeslot: string) => {
-    const location = venue === "TGH" ? "The Grand Hall (TGH)" : "To be emailed";
-    const date = venue === "TGH" ? "18th September" : "19th September";
+  const collectionDetails = (data: QueueData) => {
+    const dateLabel = DATE_LABELS[data.collectDetails.date] ?? data.collectDetails.date;
+    const timeLabel = TIME_LABELS[data.collectDetails.timeslot] ?? data.collectDetails.timeslot;
     return (
       <>
-        <p>Collection date: {date}</p>
-        <p>Collection time: {timeslot} PM</p>
-        <p>Collection venue: {location}</p>
+        <p>Collection date: {dateLabel}</p>
+        <p>Collection time: {timeLabel}</p>
+        <p>Collection venue: Taylor's Grand Hall (TGH)</p>
       </>
     );
   };
@@ -106,12 +119,9 @@ const QueueSearch = () => {
                   <div className="flex items-center gap-2">
                     Status: {statusCheck(result.queuingStatus)}
                   </div>
-                  {result.queuingStatus === "cancelled"
-                    ? null
-                    : collectionDetails(
-                        result.collectDetails.venue,
-                        result.collectDetails.timeslot,
-                      )}
+                  {result.queuingStatus !== "cancelled"
+                    ? collectionDetails(result)
+                    : null}
                 </div>
               </div>
             ) : (

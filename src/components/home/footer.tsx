@@ -8,10 +8,10 @@ const Footer: React.FC = () => {
       <p className="font-alata">
         Please contact{" "}
         <a
-          href="mailto:opcelestial2024@gmail.com"
+          href="mailto:op2026@gmail.com"
           className="hover:text-slate-400 text-slate-300"
         >
-          opcelestial2024@gmail.com
+          op2026@gmail.com
         </a>{" "}
         if there is any discrepancy.
       </p>

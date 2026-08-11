@@ -2,6 +2,7 @@ import {
   updateQueueCounter,
   updateTimeslot,
   updateVegetarianCounter,
+  CollectionDate,
 } from "./counterFirestore";
 import { db } from "./firebaseConfig";
 import {
@@ -24,8 +25,8 @@ export interface QueueData {
   dateTime: string;
   rank: number;
   collectDetails: {
-    timeslot: string;
-    venue: "TGH" | "LT1";
+    timeslot: "530" | "630" | "730";
+    date: CollectionDate; // "sept14" | "sept15" | "sept17"
   };
   queuingStatus: "queuing" | "waiting" | "cancelled" | "collected";
   ticketNumber: string | null;
@@ -69,11 +70,11 @@ export const storeQueueData = async (queueData: QueueData): Promise<void> => {
       ticketNumber,
     });
 
-    console.log("documented updated successfully");
+    console.log("document updated successfully");
     if (queueData.vegetarian) await updateVegetarianCounter(1);
     await updateQueueCounter(1);
     await updateTimeslot(
-      queueData.collectDetails.venue,
+      queueData.collectDetails.date,
       1,
       queueData.studentId,
       collectDetails.timeslot,

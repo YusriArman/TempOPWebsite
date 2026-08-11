@@ -14,7 +14,7 @@ const HomeHeader: React.FC = () => {
           <div className="flex flex-col items-center sm:items-start">
             <img src={title} className="w-1/2 md:w-1/3 lg:w-1/5" />
             <h1 className="lg:pl-3 text-xl text-center sm:text-left">
-              Orientation Party 2024
+              Orientation Party 2026
             </h1>
           </div>
         </div>

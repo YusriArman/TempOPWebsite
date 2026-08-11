@@ -2,7 +2,6 @@ import React from "react";
 import { useRegistration } from "@/contexts/RegistrationContext";
 import {
   ArrowRight,
-  LeafyGreen,
   Loader,
   LogIn,
   Ticket,
@@ -12,6 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { HoverCard } from "../ui/hover-card";
 import { HoverCardContent, HoverCardTrigger } from "@radix-ui/react-hover-card";
 
+const MAX_QUEUE = 1350;
+const MAX_WAIT = 500;
+
 const StatisticBox = () => {
   const { counterData } = useRegistration();
 
@@ -20,7 +22,7 @@ const StatisticBox = () => {
       <div className="flex justify-center p-4">
         <Card>
           <CardHeader>
-            <CardTitle>Statistics</CardTitle>
+            <CardTitle>Statistics — OP 2026</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col">
@@ -30,14 +32,14 @@ const StatisticBox = () => {
                 <HoverCard openDelay={1}>
                   <div className="font-semibold">
                     <HoverCardTrigger>
-                      <u>{counterData?.registerCount}</u> / 1350
+                      <u>{counterData?.registerCount}</u> / {MAX_QUEUE}
                     </HoverCardTrigger>
                     <HoverCardContent
                       className="italic"
                       side="right"
                       sideOffset={5}
                     >
-                      ({1350 - (counterData?.registerCount || 0)} left)
+                      ({MAX_QUEUE - (counterData?.registerCount || 0)} left)
                     </HoverCardContent>
                   </div>
                 </HoverCard>
@@ -49,14 +51,14 @@ const StatisticBox = () => {
                 <HoverCard openDelay={1}>
                   <div className="font-semibold">
                     <HoverCardTrigger>
-                      {counterData?.queueCount} / 1350
+                      {counterData?.queueCount} / {MAX_QUEUE}
                     </HoverCardTrigger>
                     <HoverCardContent
                       className="italic"
                       side="right"
                       sideOffset={5}
                     >
-                      ({1350 - (counterData?.queueCount || 0)} left)
+                      ({MAX_QUEUE - (counterData?.queueCount || 0)} left)
                     </HoverCardContent>
                   </div>
                 </HoverCard>
@@ -68,14 +70,14 @@ const StatisticBox = () => {
                 <HoverCard openDelay={1}>
                   <div className="font-semibold">
                     <HoverCardTrigger>
-                      {counterData?.waitingCount} / 500
+                      {counterData?.waitingCount} / {MAX_WAIT}
                     </HoverCardTrigger>
                     <HoverCardContent
                       className="italic"
                       side="right"
                       sideOffset={5}
                     >
-                      ({500 - (counterData?.waitingCount || 0)} left)
+                      ({MAX_WAIT - (counterData?.waitingCount || 0)} left)
                     </HoverCardContent>
                   </div>
                 </HoverCard>
@@ -121,18 +123,12 @@ const StatisticBox = () => {
                       side="right"
                       sideOffset={5}
                     >
-                      ({1350 - (counterData?.registeredCount || 0)} left)
+                      ({MAX_QUEUE - (counterData?.registeredCount || 0)} left)
                     </HoverCardContent>
                   </div>
                 </HoverCard>
               </div>
-              <div className="flex gap-2">
-                <LeafyGreen className="text-green-500" />
-                <div>Vegetarian:</div>
-                <div className="underline underline-offset-2 font-semibold">
-                  {counterData?.vegetarianCount}
-                </div>
-              </div>
+
             </div>
           </CardContent>
         </Card>

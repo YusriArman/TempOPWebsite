@@ -17,7 +17,7 @@ import { Loader2, Ticket } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { getCurrentDateTime } from "@/lib/utils";
 import { useRegistration } from "@/contexts/RegistrationContext";
-import { Checkbox } from "../ui/checkbox";
+// Checkbox removed — vegetarian option dropped
 import {
   Select,
   SelectContent,
@@ -25,14 +25,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { timeslotLimit } from "@/lib/counterFirestore";
+import { timeslotLimit, CollectionDate } from "@/lib/counterFirestore";
 import { storeWaitData } from "@/lib/waitFirestore";
+import { sendConfirmationEmail } from "@/lib/emailService";
 
 const englishNameRegex = /^[A-Za-z\s,\\/]+$/;
 const studentIdRegex = /^\d{7}$/;
 const studentEmailRegex = /^[A-Za-z0-9._%+-]+@sd\.taylors\.edu\.my$/;
 const phoneNumberRegex =
   /^\+?(\d{1,3})?[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}$/;
+
+// Waitlist: single collection date — 17 Sept 2026, LT1
+const COLLECTION_DATE_OPTIONS: { value: CollectionDate; label: string }[] = [
+  { value: "sept17", label: "17th September 2026 (Thursday) — Lecture Theatre 1 (LT1)" },
+];
+
+const TIMESLOT_OPTIONS = [
+  { value: "500", label: "5:00 PM" },
+  { value: "600", label: "6:00 PM" },
+] as const;
+
+const SLOT_CAP = 250;
 
 const formSchema = z.object({
   fullName: z.string().min(3).max(50).regex(englishNameRegex, {
@@ -50,14 +63,15 @@ const formSchema = z.object({
   phoneNumber: z.string().regex(phoneNumberRegex, {
     message: "Please enter a valid phone number",
   }),
-  vegetarian: z.boolean(),
   dateTime: z.string(),
   rank: z.number(),
   collectDetails: z.object({
-    timeslot: z.enum(["530", "630", "730", "5", "6"], {
+    date: z.enum(["sept14", "sept15", "sept17"], {
+      message: "Collection date is required",
+    }),
+    timeslot: z.enum(["530", "630", "730", "500", "600"], {
       message: "Timeslot is required",
     }),
-    venue: z.enum(["TGH", "LT1"], { message: "Invalid venue" }),
   }),
   queuingStatus: z.enum(["queuing", "waiting", "cancelled", "collected"]),
   ticketNumber: z.string().nullable(),
@@ -76,45 +90,52 @@ export const WaitForm = () => {
       studentEmail: "",
       personalEmail: "",
       phoneNumber: "",
-      vegetarian: false,
       dateTime: getCurrentDateTime(),
       rank: counterData?.waitingCount || 0,
       collectDetails: {
-        timeslot: "5",
-        venue: "LT1",
+        date: "sept17",
+        timeslot: "500",
       },
       queuingStatus: "waiting",
       ticketNumber: null,
     },
   });
 
+  const selectedDate = form.watch("collectDetails.date") as CollectionDate | undefined;
+
+  const getSlotsLeft = (date: CollectionDate | undefined, timeslot: string): number => {
+    if (!date || !timeslotData) return SLOT_CAP;
+    const slotCount = timeslotData[date]?.[timeslot as "500" | "600"]?.count || 0;
+    return Math.max(0, SLOT_CAP - slotCount);
+  };
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
     try {
-      const timeslotCap = await timeslotLimit(
-        values.collectDetails.venue,
+      const hasCapacity = await timeslotLimit(
+        values.collectDetails.date as CollectionDate,
         values.collectDetails.timeslot,
       );
-      if (!timeslotCap) {
+      if (!hasCapacity) {
         throw new Error("Reached limit");
       }
 
       values.rank += 1;
-      console.log("Values ranking:", values.rank);
 
-      //submit
       await storeWaitData(values);
       toast.success("Joined waiting list successfully");
 
-      await refreshCounterData();
+      // Send confirmation email (non-blocking)
+      sendConfirmationEmail({ ...values, queuingStatus: "waiting" });
 
+      await refreshCounterData();
       form.reset();
     } catch (error) {
       if (error instanceof Error) {
         if (error.message === "Student ID already exist") {
           toast.error("Student ID already exists. Please use a different ID.");
         } else if (error.message === "Reached limit") {
-          toast.error("Timeslot limit has been reached, try another timeslot");
+          toast.error("Timeslot limit has been reached, try another timeslot or date");
         } else {
           toast.error("An error occurred. Please try again.");
         }
@@ -163,7 +184,7 @@ export const WaitForm = () => {
               <FormItem>
                 <FormLabel>Student Email</FormLabel>
                 <FormControl>
-                  <Input placeholder="john@sd.talyors.edu.my" {...field} />
+                  <Input placeholder="john@sd.taylors.edu.my" {...field} />
                 </FormControl>
                 <FormDescription>
                   Please do not use personal email
@@ -181,7 +202,9 @@ export const WaitForm = () => {
                 <FormControl>
                   <Input placeholder="john@gmail.com" {...field} />
                 </FormControl>
-                <FormDescription>Use your personal email</FormDescription>
+                <FormDescription>
+                  Use your personal email — confirmation will be sent here
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -202,18 +225,25 @@ export const WaitForm = () => {
               </FormItem>
             )}
           />
+
+          {/* Collection Date — fixed to 17 Sept 2026, LT1 (waitlist) */}
+          <FormItem className="space-y-1">
+            <FormLabel>Collection Date</FormLabel>
+            <div className="rounded-md border px-3 py-2 text-sm bg-muted text-muted-foreground">
+              Thursday, 17th September 2026 — Lecture Theatre 1 (LT1)
+            </div>
+            <p className="text-xs text-muted-foreground">
+              You will be notified via email if a spot becomes available.
+            </p>
+          </FormItem>
+
+          {/* Step 2: Timeslot */}
           <FormField
             control={form.control}
             name="collectDetails.timeslot"
             render={({ field }) => (
               <FormItem className="space-y-3">
-                <FormLabel>Timeslot</FormLabel>
-                <FormDescription className="font-semibold">
-                  Date: 19th September
-                  <br />
-                  Venue: Will be emailed in a first come first serve basis if
-                  there are empty slots from the queuing list
-                </FormDescription>
+                <FormLabel>Preferred Timeslot</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
@@ -221,40 +251,22 @@ export const WaitForm = () => {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="5">
-                      5:00PM ({`${250 - (timeslotData?.LT1["5"].count || 0)}`}{" "}
-                      slots left)
-                    </SelectItem>
-                    <SelectItem value="6">
-                      6:00PM ({`${250 - (timeslotData?.LT1["6"].count || 0)}`}{" "}
-                      slots left)
-                    </SelectItem>
+                    {TIMESLOT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label} ({getSlotsLeft(selectedDate, opt.value)} slots left)
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormDescription>
-                  Timeslot to collect your physical ticket
+                  Preferred timeslot — first come first serve basis
                 </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="vegetarian"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Vegetarian</FormLabel>
-                <FormLabel className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                  <Checkbox
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                  <p>Are you vegetarian?</p>
-                </FormLabel>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+
+          {/* Vegetarian option removed — no food provided */}
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? (
               <>
@@ -264,7 +276,7 @@ export const WaitForm = () => {
             ) : (
               <>
                 <Ticket className="h-4 w-4 mr-2" />
-                Register
+                Join Waiting List
               </>
             )}
           </Button>
