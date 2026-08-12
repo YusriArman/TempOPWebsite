@@ -71,21 +71,12 @@ export const joinList = async (
   const queueRef    = doc(db, "queue", studentId);
   const waitRef     = doc(db, "wait",  studentId);
   const targetRef   = type === "queue" ? queueRef : waitRef;
+  const statusRef   = doc(db, "status", studentId);
   const slotRef     = doc(db, "counter", slotDocId(date, timeslot));
 
   await runTransaction(db, async (tx) => {
-    // 1. Check both collections — no double registration
-    const [queueSnap, waitSnap, slotSnap] = await Promise.all([
-      tx.get(queueRef),
-      tx.get(waitRef),
-      tx.get(slotRef),
-    ]);
-
-    if (queueSnap.exists() || waitSnap.exists()) {
-      throw new Error("Student ID already exist");
-    }
-
-    // 2. Capacity check — throw if slot doc is missing (misconfiguration, not a soft error)
+    // 1. Capacity check — throw if slot doc is missing
+    const slotSnap = await tx.get(slotRef);
     if (!slotSnap.exists()) {
       throw new Error("Slot not configured");
     }
@@ -96,12 +87,20 @@ export const joinList = async (
       throw new Error("Slot full");
     }
 
-    // 3. Atomic write: student doc + slot increment
+    // 2. Atomic write: student doc + slot increment + status doc
+    const queuingStatus = type === "queue" ? "queuing" : "waiting";
+
     tx.set(targetRef, {
       ...data,
       registeredAt: serverTimestamp(),
-      queuingStatus: type === "queue" ? "queuing" : "waiting",
+      queuingStatus,
       ticketNumber: null,
+    });
+
+    tx.set(statusRef, {
+      status: queuingStatus,
+      date,
+      timeslot,
     });
 
     if (slotSnap.exists()) {
@@ -150,6 +149,24 @@ export const getStudent = async (
 };
 
 // ---------------------------------------------------------------------------
+// getPublicStatus — searches the status collection (no PII)
+// ---------------------------------------------------------------------------
+export const getPublicStatus = async (
+  studentId: string,
+): Promise<{ status: string; date: CollectionDate; timeslot: TimeslotKey } | null> => {
+  const statusRef = doc(db, "status", studentId);
+  try {
+    const snap = await getDoc(statusRef);
+    if (snap.exists()) {
+      return snap.data() as { status: string; date: CollectionDate; timeslot: TimeslotKey };
+    }
+    return null;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// ---------------------------------------------------------------------------
 // cancelTicket — marks cancelled and releases the slot
 // ---------------------------------------------------------------------------
 export const cancelTicket = async (
@@ -166,6 +183,12 @@ export const cancelTicket = async (
     const { collectDetails, personalEmail } = snap.data() as RegistrationData;
 
     await updateDoc(docRef, { queuingStatus: "cancelled" });
+
+    // Update public status doc
+    const statusRef = doc(db, "status", studentId);
+    try {
+      await updateDoc(statusRef, { status: "cancelled" });
+    } catch { /* status doc may not exist in legacy data */ }
 
     // Release the timeslot
     const slotRef = doc(db, "counter", slotDocId(collectDetails.date, collectDetails.timeslot));
@@ -194,6 +217,13 @@ export const promoteToQueue = async (studentId: string): Promise<void> => {
     const snap = await getDoc(waitRef);
     if (!snap.exists()) return;
     await updateDoc(waitRef, { queuingStatus: "queuing" });
+
+    // Update public status doc
+    const statusRef = doc(db, "status", studentId);
+    try {
+      await updateDoc(statusRef, { status: "queuing" });
+    } catch { /* status doc may not exist in legacy data */ }
+
     await updateWaitingToQueueCounter(1).catch(() => {});
   } catch (error) {
     throw error;

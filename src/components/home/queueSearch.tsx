@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { getStudent, RegistrationData } from "@/lib/listFirestore";
+import { getPublicStatus } from "@/lib/listFirestore";
+import { CollectionDate, TimeslotKey } from "@/lib/eventConfig";
 import toast, { Toaster } from "react-hot-toast";
 import { Check, Search, X } from "lucide-react";
 
@@ -11,7 +12,7 @@ import { DATE_LABELS, TIME_LABELS, VENUE_BY_DATE } from "@/lib/eventConfig";
 
 const QueueSearch = () => {
   const [studentId, setStudentId] = useState<string>("");
-  const [result, setResult] = useState<RegistrationData | null>(null);
+  const [result, setResult] = useState<{ studentId: string; status: string; date: CollectionDate; timeslot: TimeslotKey } | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     setResult(null);
@@ -23,9 +24,12 @@ const QueueSearch = () => {
     }
 
     try {
-      const data = await getStudent(studentId);
-      setResult(data);
-      if (!data) toast.error("No student ID found");
+      const data = await getPublicStatus(studentId);
+      if (data) {
+        setResult({ ...data, studentId });
+      } else {
+        toast.error("No student ID found");
+      }
     } catch (error) {
       console.error(error);
       toast.error("Please try again");
@@ -59,10 +63,10 @@ const QueueSearch = () => {
     }
   };
 
-  const collectionDetails = (data: RegistrationData) => {
-    const dateLabel  = DATE_LABELS[data.collectDetails.date]     ?? data.collectDetails.date;
-    const timeLabel  = TIME_LABELS[data.collectDetails.timeslot] ?? data.collectDetails.timeslot;
-    const venueLabel = VENUE_BY_DATE[data.collectDetails.date]   ?? "Taylor's Grand Hall (TGH)";
+  const collectionDetails = (data: { date: CollectionDate; timeslot: TimeslotKey }) => {
+    const dateLabel  = DATE_LABELS[data.date]     ?? data.date;
+    const timeLabel  = TIME_LABELS[data.timeslot] ?? data.timeslot;
+    const venueLabel = VENUE_BY_DATE[data.date]   ?? "Taylor's Grand Hall (TGH)";
     return (
       <>
         <p>Collection date: {dateLabel}</p>
@@ -104,12 +108,10 @@ const QueueSearch = () => {
                 </h3>
                 <div className="text-left text-white">
                   <div>ID: {result.studentId}</div>
-                  <div>Name: {result.fullName}</div>
-                  <div>Email: {result.studentEmail}</div>
                   <div className="flex items-center gap-2">
-                    Status: {statusCheck(result.queuingStatus)}
+                    Status: {statusCheck(result.status)}
                   </div>
-                  {result.queuingStatus !== "cancelled"
+                  {result.status !== "cancelled"
                     ? collectionDetails(result)
                     : null}
                 </div>
