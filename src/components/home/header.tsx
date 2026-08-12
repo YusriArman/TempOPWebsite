@@ -1,6 +1,6 @@
 import React from "react";
-import title from "../../assets/2_Celestial title with pink glow.png";
-import planet from "../../assets/2_bellevue planet.png";
+import title from "../../assets/title.webp";
+import planet from "../../assets/planet.webp";
 import { Link, useLocation } from "react-router-dom";
 import { CircleHelp, Ticket } from "lucide-react";
 

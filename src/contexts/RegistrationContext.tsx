@@ -5,7 +5,7 @@ import React, {
   useState,
   useCallback,
 } from "react";
-import { fetchQueueData, QueueData } from "@/lib/queueFirestore";
+import { fetchList, RegistrationData as QueueData } from "@/lib/listFirestore";
 import {
   getQueueCount,
   CounterDataType,
@@ -14,7 +14,6 @@ import {
 } from "@/lib/counterFirestore";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebaseConfig";
-import { fetchWaitData } from "@/lib/waitFirestore";
 import { fetchRegisterData, RegisterData } from "@/lib/registerFirestore";
 import {
   CollectionDate,
@@ -44,6 +43,10 @@ interface RegistrationContextType {
   waitLimit: boolean;
   registrationData: RegisterData[] | null;
   refreshRegistrationData: () => Promise<void>;
+  /** Start the live counter onSnapshot — call when the registration modal opens */
+  subscribeCounters: () => void;
+  /** Stop the live counter onSnapshot — call when the registration modal closes */
+  unsubscribeCounters: () => void;
 }
 
 const RegistrationContext = createContext<RegistrationContextType | undefined>(
@@ -67,17 +70,40 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
   const [waitingData, setWaitingData] = useState<QueueData[] | null>(null);
   const [counterData, setCounterData] = useState<CounterDataType | null>(null);
   const [timeslotData, setTimeslotData] = useState<AllTimeslotData | null>(null);
-  // Default false = queue is open. Firebase will update if connected.
+  // Ref to the counter unsubscribe fn — stored outside state to avoid re-renders
+  const counterUnsubRef = React.useRef<(() => void) | null>(null);
+
+  const subscribeCounters = useCallback(() => {
+    if (counterUnsubRef.current) return; // already subscribed
+    const counterRef = doc(db, "counter", "count");
+    counterUnsubRef.current = onSnapshot(
+      counterRef,
+      (snap) => {
+        if (snap.exists()) {
+          const d = snap.data() as CounterDataType;
+          setCounterData(d);
+          setQueueLimit(d.queueCount >= 1350);
+          setWaitLimit(d.waitingCount >= 500);
+        }
+      },
+    );
+  }, []);
+
+  const unsubscribeCounters = useCallback(() => {
+    counterUnsubRef.current?.();
+    counterUnsubRef.current = null;
+  }, []);
+
   const [queueLimit, setQueueLimit] = useState<boolean>(false);
-  const [waitLimit, setWaitLimit] = useState<boolean>(false);
+  const [waitLimit,  setWaitLimit]  = useState<boolean>(false);
+
   const [registrationData, setRegistrationData] = useState<
     RegisterData[] | null
   >(null);
 
   const refreshQueueData = useCallback(async () => {
     try {
-      const allQueueData = await fetchQueueData();
-      setQueueData(allQueueData);
+      setQueueData(await fetchList("queue"));
     } catch (error) {
       console.error("Error fetching queue data:", error);
     }
@@ -85,8 +111,7 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const refreshWaitData = useCallback(async () => {
     try {
-      const allWaitingData = await fetchWaitData();
-      setWaitingData(allWaitingData);
+      setWaitingData(await fetchList("wait"));
     } catch (error) {
       console.error("Error fetching wait data:", error);
     }
@@ -130,55 +155,19 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   useEffect(() => {
-    // Counter snapshot listener
-    const counterRef = doc(db, "counter", "count");
-    const unsubCounter = onSnapshot(
-      counterRef,
-      (docSnapshot) => {
-        if (docSnapshot.exists()) {
-          setCounterData(docSnapshot.data() as CounterDataType);
-          const queuing = docSnapshot.data().queueCount;
-          const waiting = docSnapshot.data().waitingCount;
-          setQueueLimit(queuing >= 1350);
-          setWaitLimit(waiting >= 500);
-        } else {
-          console.log("counter update doc not found");
-        }
-      },
-      (error) => {
-        console.error("Error getting counter refresh snapshot:", error);
-      },
-    );
+    // Initial counter fetch (no persistent socket open on page load)
+    refreshCounterData();
 
-    // Per-date timeslot snapshot listeners — only for active collection dates
-    const unsubDateListeners = COLLECTION_DATES.map((date) => {
-      const dateRef = doc(db, "counter", date);
-      return onSnapshot(
-        dateRef,
-        (docSnapshot) => {
-          if (docSnapshot.exists()) {
-            const data = docSnapshot.data() as DateSlotData;
-            setTimeslotData((prev) => ({
-              ...Object.fromEntries(
-                COLLECTION_DATES.map((d) => [d, prev?.[d] ?? {}]),
-              ),
-              [date]: data,
-            } as AllTimeslotData));
-          } else {
-            console.log(`${date} timeslot document not found.`);
-          }
-        },
-        (error) => {
-          console.error(`Error listening to ${date} timeslot updates:`, error);
-        },
-      );
-    });
+    // Poll timeslot counts once on mount — updated again when modal opens
+    refreshTimeslotData();
+
+    // Subscribe to counter updates by default so queueLimit/waitLimit are live
+    subscribeCounters();
 
     return () => {
-      unsubCounter();
-      unsubDateListeners.forEach((unsub) => unsub());
+      unsubscribeCounters();
     };
-  }, []);
+  }, [refreshCounterData, refreshTimeslotData, subscribeCounters, unsubscribeCounters]);
 
   return (
     <RegistrationContext.Provider
@@ -195,6 +184,8 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
         waitLimit,
         registrationData,
         refreshRegistrationData,
+        subscribeCounters,
+        unsubscribeCounters,
       }}
     >
       {children}

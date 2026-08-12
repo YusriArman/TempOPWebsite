@@ -167,4 +167,12 @@ export const faqList: FaqProp[] = [
       "Yes! A confirmation email will be sent to your personal email address after you successfully register in the queuing system. Please check your inbox (and spam folder) after submitting.",
     ],
   },
+  {
+    title: "What if I try to register but I'm told I'm not on the eligible list?",
+    desc: [
+      "Eligibility is based on the official freshman intake list for September 2026.",
+      "If you believe there is a mistake, please email us at " + EVENT.contactEmail + " with your full name, student ID, and programme, and the committee will manually verify your status.",
+      "Note: registrations from students not on the official list will be blocked or cancelled.",
+    ],
+  },
 ];

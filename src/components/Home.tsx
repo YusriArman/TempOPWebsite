@@ -2,7 +2,7 @@ import QueueModal from "./home/queueModal";
 import QueueProgress from "./home/queueProgress";
 import QueueSearch from "./home/queueSearch";
 import HomeHeader from "./home/header";
-import bgProp from "../assets/2_Logo without word.png";
+import bgProp from "../assets/logo.webp";
 import Footer from "./home/footer";
 
 const Home = () => {

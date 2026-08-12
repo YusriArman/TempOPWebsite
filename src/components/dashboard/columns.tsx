@@ -1,20 +1,30 @@
 import { ColumnDef } from "@tanstack/react-table";
-import { QueueData } from "@/lib/queueFirestore";
+import { RegistrationData } from "@/lib/listFirestore";
 import { Check, X, ArrowUpDown, Users, Loader } from "lucide-react";
 import { Button } from "../ui/button";
 
-export const columns: ColumnDef<QueueData>[] = [
+export const columns: ColumnDef<RegistrationData>[] = [
   {
-    accessorKey: "rank",
-    header: ({ column }) => {
+    accessorKey: "registeredAt",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Registered
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const ts = row.original.registeredAt as { seconds?: number } | null;
+      if (!ts?.seconds) return <span className="text-muted-foreground">—</span>;
       return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Rank
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
+        <span>
+          {new Date(ts.seconds * 1000).toLocaleString("en-MY", {
+            dateStyle: "short",
+            timeStyle: "short",
+          })}
+        </span>
       );
     },
   },
@@ -25,10 +35,6 @@ export const columns: ColumnDef<QueueData>[] = [
   {
     accessorKey: "fullName",
     header: "Name",
-  },
-  {
-    accessorKey: "dateTime",
-    header: "Date",
   },
   {
     accessorKey: "queuingStatus",
@@ -46,13 +52,12 @@ export const columns: ColumnDef<QueueData>[] = [
   },
   {
     accessorKey: "ticketNumber",
-    header: "Ticket Number",
-    cell: ({ row }) => {
-      return row.original.ticketNumber ? (
+    header: "Ticket",
+    cell: ({ row }) =>
+      row.original.ticketNumber ? (
         <span>{row.original.ticketNumber}</span>
       ) : (
         <X className="text-red-500" />
-      );
-    },
+      ),
   },
 ];

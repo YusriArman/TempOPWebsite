@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { getStudentId, QueueData } from "@/lib/queueFirestore";
+import { getStudent, RegistrationData } from "@/lib/listFirestore";
 import toast, { Toaster } from "react-hot-toast";
 import { Check, Search, X } from "lucide-react";
 
@@ -11,7 +11,7 @@ import { DATE_LABELS, TIME_LABELS, VENUE_BY_DATE } from "@/lib/eventConfig";
 
 const QueueSearch = () => {
   const [studentId, setStudentId] = useState<string>("");
-  const [result, setResult] = useState<QueueData | null>(null);
+  const [result, setResult] = useState<RegistrationData | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     setResult(null);
@@ -23,7 +23,7 @@ const QueueSearch = () => {
     }
 
     try {
-      const data = await getStudentId(studentId);
+      const data = await getStudent(studentId);
       setResult(data);
       if (!data) toast.error("No student ID found");
     } catch (error) {
@@ -59,7 +59,7 @@ const QueueSearch = () => {
     }
   };
 
-  const collectionDetails = (data: QueueData) => {
+  const collectionDetails = (data: RegistrationData) => {
     const dateLabel  = DATE_LABELS[data.collectDetails.date]     ?? data.collectDetails.date;
     const timeLabel  = TIME_LABELS[data.collectDetails.timeslot] ?? data.collectDetails.timeslot;
     const venueLabel = VENUE_BY_DATE[data.collectDetails.date]   ?? "Taylor's Grand Hall (TGH)";

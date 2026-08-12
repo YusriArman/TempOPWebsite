@@ -1,5 +1,5 @@
 import emailjs from "@emailjs/browser";
-import { QueueData } from "./queueFirestore";
+import { RegistrationData } from "./listFirestore";
 import { DATE_LABELS, TIME_LABELS, VENUE_BY_DATE, EVENT } from "./eventConfig";
 
 const SERVICE_ID  = import.meta.env.VITE_EMAILJS_SERVICE_ID as string;
@@ -21,7 +21,7 @@ const PUBLIC_KEY  = import.meta.env.VITE_EMAILJS_PUBLIC_KEY  as string;
  *   - event_date      : event date label from eventConfig
  *   - contact_email   : committee contact email from eventConfig
  */
-export const sendConfirmationEmail = async (data: QueueData): Promise<void> => {
+export const sendConfirmationEmail = async (data: RegistrationData): Promise<void> => {
   const isWaiting = data.queuingStatus === "waiting";
 
   const collectionDate = DATE_LABELS[data.collectDetails.date]     ?? data.collectDetails.date;

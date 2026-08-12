@@ -83,9 +83,6 @@ export const CAP_BY_DATE: Record<string, number> = {
   [WAITLIST_COLLECTION.dateKey]: WAITLIST_COLLECTION.slotCap,
 };
 
-// ---------------------------------------------------------------------------
-// CollectionDate type — kept in sync with config keys
-// ---------------------------------------------------------------------------
 export type CollectionDate =
   | typeof QUEUE_COLLECTION.dateKey
   | typeof WAITLIST_COLLECTION.dateKey;
@@ -96,3 +93,10 @@ export type CollectionDate =
 export type TimeslotKey =
   | typeof QUEUE_COLLECTION.timeslots[number]["key"]
   | typeof WAITLIST_COLLECTION.timeslots[number]["key"];
+
+// ---------------------------------------------------------------------------
+// Per-slot Firestore document ID — "sept15_530", "sept17_500", etc.
+// Used for split counter docs to reduce write contention.
+// ---------------------------------------------------------------------------
+export const slotDocId = (date: CollectionDate, timeslot: TimeslotKey): string =>
+  `${date}_${timeslot}`;

@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------------------------------------------------------
+    // Roster — only readable/writable via Admin SDK (server side).
+    // Prevents client from reading the eligibility list.
+    // -----------------------------------------------------------------------
+    match /roster/{studentId} {
+      allow read, write: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Queue — students write their own record, nobody reads from client.
+    // Rules enforce:
+    //   1. No prior queue or wait record (one registration per student)
+    //   2. Student is on the roster (eligibility check)
+    // Note: the transaction in listFirestore.ts is the cap gate.
+    // -----------------------------------------------------------------------
+    match /queue/{studentId} {
+      allow read: if false;
+      allow create: if
+        !exists(/databases/$(database)/documents/queue/$(studentId)) &&
+        !exists(/databases/$(database)/documents/wait/$(studentId))  &&
+        exists(/databases/$(database)/documents/roster/$(studentId));
+      allow update, delete: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Wait — same rules as queue
+    // -----------------------------------------------------------------------
+    match /wait/{studentId} {
+      allow read: if false;
+      allow create: if
+        !exists(/databases/$(database)/documents/queue/$(studentId)) &&
+        !exists(/databases/$(database)/documents/wait/$(studentId))  &&
+        exists(/databases/$(database)/documents/roster/$(studentId));
+      allow update, delete: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Counter — public read (progress bars), write only from trusted server.
+    // -----------------------------------------------------------------------
+    match /counter/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Registration + cancel — admin only (custom claim required).
+    // -----------------------------------------------------------------------
+    match /registration/{ticketNumber} {
+      allow read, write: if request.auth != null
+                         && request.auth.token.admin == true;
+    }
+
+    match /cancel/{docId} {
+      allow read, write: if request.auth != null
+                         && request.auth.token.admin == true;
+    }
+  }
+}

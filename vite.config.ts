@@ -10,4 +10,13 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  esbuild: {
+    // Strip all console.* and debugger statements in production.
+    // Development builds keep them so you can still debug locally.
+    drop: process.env.NODE_ENV === "production" ? ["console", "debugger"] : [],
+  },
+  build: {
+    // Raise warning threshold slightly — we'll bring it down with WebP assets.
+    chunkSizeWarningLimit: 600,
+  },
 });

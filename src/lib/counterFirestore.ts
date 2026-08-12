@@ -5,17 +5,18 @@ import {
   getDoc,
   increment,
   updateDoc,
-  arrayUnion,
+  runTransaction,
 } from "firebase/firestore";
 import {
   CollectionDate,
-  CAP_BY_DATE,
+  TimeslotKey,
   QUEUE_COLLECTION,
   WAITLIST_COLLECTION,
+  slotDocId,
 } from "./eventConfig";
 
 // ---------------------------------------------------------------------------
-// Counter document shape
+// Counter document shape  (counter/count — display-only aggregate)
 // ---------------------------------------------------------------------------
 export interface CounterDataType {
   queueCount: number;
@@ -26,17 +27,21 @@ export interface CounterDataType {
 }
 
 // ---------------------------------------------------------------------------
-// Timeslot document shape — flexible Record so both
-// "530"/"630"/"730" (queue) and "500"/"600" (waitlist) are valid at runtime.
+// Per-slot document shape  (counter/sept15_530, counter/sept17_500, …)
 // ---------------------------------------------------------------------------
+export interface SlotData {
+  count: number;
+  cap: number;
+}
+
+// Legacy aggregate shape kept for RegistrationContext snapshot listener
 export interface TimeSlotData {
   count: number;
   studentId: string[];
 }
-
 export type DateSlotData = Record<string, TimeSlotData>;
 
-// Re-export CollectionDate from eventConfig so existing imports still work
+// Re-export types so existing imports still compile
 export type { CollectionDate };
 
 // ---------------------------------------------------------------------------
@@ -45,154 +50,136 @@ export type { CollectionDate };
 export const getQueueCount = async (): Promise<CounterDataType | null> => {
   const counterRef = doc(db, "counter", "count");
   try {
-    const docSnap = await getDoc(counterRef);
-    if (docSnap.exists()) return docSnap.data() as CounterDataType;
-    console.log("no queueCounter document found");
+    const snap = await getDoc(counterRef);
+    if (snap.exists()) return snap.data() as CounterDataType;
     return null;
   } catch (error) {
-    console.error(error);
     throw error;
   }
 };
 
 // ---------------------------------------------------------------------------
-// Counter writes
+// Aggregate counter writes (display-only — correctness lives in the transaction)
 // ---------------------------------------------------------------------------
-export const updateQueueCounter = async (incrementValue: number): Promise<void> => {
-  const counterRef = doc(db, "counter", "count");
+export const updateQueueCounter = async (delta: number): Promise<void> => {
   try {
-    await updateDoc(counterRef, { queueCount: increment(incrementValue) });
-  } catch (error) {
-    console.error("Error updating queueCounter:", error);
-  }
+    await updateDoc(doc(db, "counter", "count"), { queueCount: increment(delta) });
+  } catch { /* non-fatal */ }
 };
 
-export const updateRegisterCounter = async (incrementValue: number): Promise<void> => {
-  const counterRef = doc(db, "counter", "count");
+export const updateWaitingCounter = async (delta: number): Promise<void> => {
   try {
-    await updateDoc(counterRef, { registerCount: increment(incrementValue) });
-  } catch (error) {
-    console.error("Error updating registerCounter:", error);
-  }
+    await updateDoc(doc(db, "counter", "count"), { waitingCount: increment(delta) });
+  } catch { /* non-fatal */ }
 };
 
-export const updateWaitingCounter = async (incrementValue: number): Promise<void> => {
-  const counterRef = doc(db, "counter", "count");
+export const updateWaitingToQueueCounter = async (delta: number): Promise<void> => {
   try {
-    await updateDoc(counterRef, { waitingCount: increment(incrementValue) });
-  } catch (error) {
-    console.error("Error updating waitingCounter:", error);
-  }
+    await updateDoc(doc(db, "counter", "count"), { waitingToQueueCount: increment(delta) });
+  } catch { /* non-fatal */ }
 };
 
-export const updateWaitingToQueueCounter = async (incrementValue: number): Promise<void> => {
-  const counterRef = doc(db, "counter", "count");
+export const updateRegisterCounter = async (delta: number): Promise<void> => {
   try {
-    await updateDoc(counterRef, { waitingToQueueCount: increment(incrementValue) });
-  } catch (error) {
-    console.error("Error updating waitingToQueueCounter:", error);
-  }
+    await updateDoc(doc(db, "counter", "count"), { registerCount: increment(delta) });
+  } catch { /* non-fatal */ }
 };
 
-export const updateRegisteredCounter = async (incrementValue: number): Promise<void> => {
-  const counterRef = doc(db, "counter", "count");
+/**
+ * Fixed: accepts an explicit delta (+1 or -1) so un-registering decrements
+ * instead of always incrementing.
+ */
+export const updateRegisteredCounter = async (delta: 1 | -1): Promise<void> => {
   try {
-    await updateDoc(counterRef, { registeredCount: increment(incrementValue) });
-  } catch (error) {
-    console.error("Error updating registeredCounter:", error);
-  }
+    await updateDoc(doc(db, "counter", "count"), { registeredCount: increment(delta) });
+  } catch { /* non-fatal */ }
 };
 
 // ---------------------------------------------------------------------------
-// Timeslot init — derived from eventConfig, no magic strings here
+// Per-slot document init — one doc per slot, e.g. counter/sept15_530
 // ---------------------------------------------------------------------------
-const emptySlot = (): TimeSlotData => ({ count: 0, studentId: [] });
-
-export const initTimeSlotCount = async (): Promise<void> => {
-  const collections = [
-    {
-      dateKey: QUEUE_COLLECTION.dateKey,
-      slots: QUEUE_COLLECTION.timeslots.map(({ key }) => key),
-    },
-    {
-      dateKey: WAITLIST_COLLECTION.dateKey,
-      slots: WAITLIST_COLLECTION.timeslots.map(({ key }) => key),
-    },
+export const initSlotDocs = async (): Promise<void> => {
+  const allSlots = [
+    ...QUEUE_COLLECTION.timeslots.map((t) => ({
+      id: slotDocId(QUEUE_COLLECTION.dateKey, t.key),
+      cap: QUEUE_COLLECTION.slotCap,
+    })),
+    ...WAITLIST_COLLECTION.timeslots.map((t) => ({
+      id: slotDocId(WAITLIST_COLLECTION.dateKey, t.key),
+      cap: WAITLIST_COLLECTION.slotCap,
+    })),
   ];
-
-  try {
-    for (const { dateKey, slots } of collections) {
-      const slotData: DateSlotData = Object.fromEntries(
-        slots.map((key) => [key, emptySlot()]),
-      );
-      await setDoc(doc(db, "counter", dateKey), slotData);
-    }
-    console.log("Firestore timeslots initialised from eventConfig");
-  } catch (error) {
-    console.error("Error initialising timeslots:", error);
+  for (const { id, cap } of allSlots) {
+    await setDoc(doc(db, "counter", id), { count: 0, cap } satisfies SlotData);
   }
 };
 
 // ---------------------------------------------------------------------------
-// Timeslot reads
+// Per-slot read
+// ---------------------------------------------------------------------------
+export const getSlotData = async (
+  date: CollectionDate,
+  timeslot: TimeslotKey,
+): Promise<SlotData | null> => {
+  try {
+    const snap = await getDoc(doc(db, "counter", slotDocId(date, timeslot)));
+    return snap.exists() ? (snap.data() as SlotData) : null;
+  } catch {
+    return null;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Atomic slot increment (used inside joinList transaction)
+// Returns false if cap is already reached, true on success.
+// ---------------------------------------------------------------------------
+export const incrementSlotAtomic = async (
+  date: CollectionDate,
+  timeslot: TimeslotKey,
+): Promise<boolean> => {
+  const slotRef = doc(db, "counter", slotDocId(date, timeslot));
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(slotRef);
+      if (!snap.exists()) throw new Error("slot-not-found");
+      const { count, cap } = snap.data() as SlotData;
+      if (count >= cap) throw new Error("slot-full");
+      tx.update(slotRef, { count: increment(1) });
+    });
+    return true;
+  } catch (e) {
+    if (e instanceof Error && (e.message === "slot-full" || e.message === "slot-not-found")) {
+      return false;
+    }
+    throw e;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Atomic slot decrement (used by cancelTicket to release the slot)
+// ---------------------------------------------------------------------------
+export const decrementSlot = async (
+  date: CollectionDate,
+  timeslot: TimeslotKey,
+): Promise<void> => {
+  try {
+    const slotRef = doc(db, "counter", slotDocId(date, timeslot));
+    await updateDoc(slotRef, { count: increment(-1) });
+  } catch { /* non-fatal */ }
+};
+
+// ---------------------------------------------------------------------------
+// Legacy aggregate-date slot read — kept for RegistrationContext
 // ---------------------------------------------------------------------------
 export const getTimeslotCount = async (
   date: CollectionDate,
 ): Promise<DateSlotData | null> => {
-  const dateRef = doc(db, "counter", date);
-  try {
-    const dateSnap = await getDoc(dateRef);
-    if (dateSnap.exists()) return dateSnap.data() as DateSlotData;
-    console.log(`No counter document found for ${date}`);
-    return null;
-  } catch (error) {
-    console.error("Error getting timeslot data", error);
-    return null;
+  // Build from individual slot docs
+  const collection = date === QUEUE_COLLECTION.dateKey ? QUEUE_COLLECTION : WAITLIST_COLLECTION;
+  const result: DateSlotData = {};
+  for (const { key } of collection.timeslots) {
+    const slot = await getSlotData(date, key);
+    result[key] = { count: slot?.count ?? 0, studentId: [] };
   }
-};
-
-// ---------------------------------------------------------------------------
-// Timeslot increment — records studentId in the slot array
-// ---------------------------------------------------------------------------
-export const updateTimeslot = async (
-  date: CollectionDate,
-  incrementValue: number,
-  studentId: string,
-  time: string,
-): Promise<void> => {
-  const dateRef = doc(db, "counter", date);
-  try {
-    await updateDoc(dateRef, {
-      [`${time}.count`]:     increment(incrementValue),
-      [`${time}.studentId`]: arrayUnion(studentId),
-    });
-  } catch (error) {
-    console.error("Error updating timeslot:", error);
-  }
-};
-
-// ---------------------------------------------------------------------------
-// Timeslot cap check — cap comes from eventConfig, not hardcoded
-// ---------------------------------------------------------------------------
-export const timeslotLimit = async (
-  date: CollectionDate,
-  time: string,
-): Promise<boolean> => {
-  const dateRef = doc(db, "counter", date);
-  const cap = CAP_BY_DATE[date];          // 450 for TGH, 250 for LT1
-
-  try {
-    const dateSnap = await getDoc(dateRef);
-    if (dateSnap.exists()) {
-      const slotData = dateSnap.data()[time] as TimeSlotData | undefined;
-      if (slotData?.count !== undefined) return slotData.count < cap;
-      console.log("No data for given timeslot");
-      return false;
-    }
-    console.log(`No counter document found for ${date}`);
-    return false;
-  } catch (error) {
-    console.error("Error checking timeslot limit:", error);
-    return false;
-  }
+  return result;
 };

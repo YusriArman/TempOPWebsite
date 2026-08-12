@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as ProgressPrimitive from "@radix-ui/react-progress";
-import musicNote from "../../assets/2_music note 1.png";
+import musicNote from "../../assets/music-note.webp";
 
 import { cn } from "@/lib/utils";
 

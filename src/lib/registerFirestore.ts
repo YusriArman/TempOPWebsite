@@ -34,7 +34,6 @@ export const registerTicket = async (
 
     await setDoc(docRef, { ticketNumber, studentId, createdAt, registered });
     await updateRegisterCounter(1);
-    console.log("Document successfully written with ID: ", docRef.id);
   } catch (error) {
     console.log("Error registering ticket:", error);
     throw error;
@@ -94,15 +93,12 @@ export const updateRegistered = async (ticketNumber: string): Promise<void> => {
   try {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      await updateDoc(docRef, {
-        registered: !docSnap.data().registered,
-      });
-      await updateRegisteredCounter(1);
-      console.log(`Register status for ${ticketNumber} updated`);
-    } else {
-      console.log("no doc found");
+      const newValue = !docSnap.data().registered;
+      await updateDoc(docRef, { registered: newValue });
+      // +1 when marking registered, -1 when un-registering
+      await updateRegisteredCounter(newValue ? 1 : -1);
     }
   } catch (error) {
-    console.error("Error updating status:", error);
+    console.error("Error updating registration status:", error);
   }
 };

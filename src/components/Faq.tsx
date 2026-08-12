@@ -5,7 +5,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import bgProp from "../assets/2_Logo without word.png";
+import bgProp from "../assets/logo.webp";
 import HomeHeader from "./home/header";
 import { faqList } from "./faq/faq";
 import Footer from "./home/footer";

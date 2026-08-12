@@ -4,8 +4,7 @@ import { Button } from "./ui/button";
 import { Orbit } from "lucide-react";
 import QueueProgress from "./home/queueProgress";
 import { Toaster } from "react-hot-toast";
-import QueueDataTable from "./table/queueDataTable";
-import WaitDataTable from "./table/waitDataTable";
+import ListDataTable from "./table/ListDataTable";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { useState } from "react";
 import RegisterDataTable from "./table/registerDataTable";
@@ -24,14 +23,10 @@ const Dashboard = () => {
 
   const renderTable = () => {
     switch (activeTable) {
-      case "queue":
-        return <QueueDataTable />;
-      case "wait":
-        return <WaitDataTable />;
-      case "register":
-        return <RegisterDataTable />;
-      default:
-        return <QueueDataTable />;
+      case "queue":    return <ListDataTable type="queue" />;
+      case "wait":     return <ListDataTable type="wait" />;
+      case "register": return <RegisterDataTable />;
+      default:         return <ListDataTable type="queue" />;
     }
   };
 
