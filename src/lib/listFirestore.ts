@@ -16,6 +16,7 @@
 import { db } from "./firebaseConfig";
 import {
   doc,
+  setDoc,
   getDoc,
   updateDoc,
   collection,
@@ -29,7 +30,6 @@ import {
   CollectionDate,
   TimeslotKey,
   slotDocId,
-  CAP_BY_DATE,
 } from "./eventConfig";
 import {
   updateQueueCounter,
@@ -72,7 +72,6 @@ export const joinList = async (
   const waitRef     = doc(db, "wait",  studentId);
   const targetRef   = type === "queue" ? queueRef : waitRef;
   const slotRef     = doc(db, "counter", slotDocId(date, timeslot));
-  const cap         = CAP_BY_DATE[date];
 
   await runTransaction(db, async (tx) => {
     // 1. Check both collections — no double registration
@@ -86,13 +85,12 @@ export const joinList = async (
       throw new Error("Student ID already exist");
     }
 
-    // 2. Capacity check — use cap from eventConfig if slot doc missing
-    const slotCount = slotSnap.exists()
-      ? (slotSnap.data() as SlotData).count
-      : 0;
-    const slotCap = slotSnap.exists()
-      ? (slotSnap.data() as SlotData).cap
-      : cap;
+    // 2. Capacity check — throw if slot doc is missing (misconfiguration, not a soft error)
+    if (!slotSnap.exists()) {
+      throw new Error("Slot not configured");
+    }
+
+    const { count: slotCount, cap: slotCap } = slotSnap.data() as SlotData;
 
     if (slotCount >= slotCap) {
       throw new Error("Slot full");
@@ -203,35 +201,28 @@ export const promoteToQueue = async (studentId: string): Promise<void> => {
 };
 
 // ---------------------------------------------------------------------------
-// Backward-compat re-exports so any remaining references compile
+// overrideRoster — admin manual override for unlisted students
 // ---------------------------------------------------------------------------
-/** @deprecated Use joinList("queue", ...) instead */
-export const storeQueueData = (data: RegistrationData) =>
-  joinList("queue", data);
+export const overrideRoster = async (
+  studentId: string,
+  fullName: string,
+  programme: string,
+  adminUid: string,
+): Promise<void> => {
+  const rosterRef = doc(db, "roster", studentId);
+  try {
+    await setDoc(rosterRef, {
+      fullName,
+      programme,
+      eligible: true,
+      overriddenBy: adminUid,
+      uploadedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    throw error;
+  }
+};
 
-/** @deprecated Use joinList("wait", ...) instead */
-export const storeWaitData = (data: RegistrationData) =>
-  joinList("wait", data);
-
-/** @deprecated Use fetchList("queue") instead */
-export const fetchQueueData = () => fetchList("queue");
-
-/** @deprecated Use fetchList("wait") instead */
-export const fetchWaitData = () => fetchList("wait");
-
-/** @deprecated Use getStudent instead */
-export const getStudentId = getStudent;
-
-/** @deprecated Use cancelTicket("queue", ...) instead */
-export const cancelQueueTicket = (studentId: string) =>
-  cancelTicket("queue", studentId);
-
-/** @deprecated Use cancelTicket("wait", ...) instead */
-export const cancelWaitTicket = (studentId: string) =>
-  cancelTicket("wait", studentId);
-
-/** @deprecated Use promoteToQueue instead */
-export const updateWaitingToQueuing = promoteToQueue;
-
-// QueueData kept as alias for build compatibility
+// QueueData alias kept so any remaining RegistrationData references compile
 export type QueueData = RegistrationData;
+

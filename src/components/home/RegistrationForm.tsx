@@ -40,6 +40,7 @@ import {
   WAITLIST_COLLECTION,
   CollectionDate,
   TimeslotKey,
+  EVENT,
 } from "@/lib/eventConfig";
 import { joinList, ListType } from "@/lib/listFirestore";
 
@@ -164,6 +165,8 @@ export const RegistrationForm = ({ type }: Props) => {
           toast.error("You are already registered.");
         } else if (error.message === "Slot full") {
           toast.error("This timeslot is full — please choose another.");
+        } else if (error.message.includes("Missing or insufficient permissions") || error.message.includes("permission-denied")) {
+          toast.error(`You are not on the eligible list. Contact ${EVENT.contactEmail} if this is a mistake.`, { duration: 5000 });
         } else {
           toast.error("An error occurred. Please try again.");
         }

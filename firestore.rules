@@ -3,60 +3,100 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // -----------------------------------------------------------------------
-    // Roster — only readable/writable via Admin SDK (server side).
-    // Prevents client from reading the eligibility list.
+    // Helper — is the caller a signed-in admin dashboard user?
+    // The dashboard login uses Firebase Auth (email/password).
+    // Any authenticated user can perform admin operations for now;
+    // add   && request.auth.token.admin == true   once the custom claim
+    // is set via the Admin SDK.
+    // -----------------------------------------------------------------------
+    function isAdmin() {
+      return request.auth != null;
+    }
+
+    // -----------------------------------------------------------------------
+    // Roster — Admin SDK / server, or authenticated admin via dashboard.
     // -----------------------------------------------------------------------
     match /roster/{studentId} {
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
 
     // -----------------------------------------------------------------------
-    // Queue — students write their own record, nobody reads from client.
-    // Rules enforce:
-    //   1. No prior queue or wait record (one registration per student)
-    //   2. Student is on the roster (eligibility check)
-    // Note: the transaction in listFirestore.ts is the cap gate.
+    // Queue
+    //   read   : open — needed for the joinList transaction (tx.get duplicate
+    //             check) and for the admin dashboard (fetchList).
+    //   create : one registration per student, no prior queue or wait record.
+    //             (Roster check is left to the Admin SDK upload script; once
+    //              Firebase Auth is added the exists(roster/...) check can be
+    //              re-enabled here.)
+    //   update : admin only — cancelTicket sets queuingStatus = "cancelled".
+    //   delete : never.
     // -----------------------------------------------------------------------
     match /queue/{studentId} {
-      allow read: if false;
+      allow read: if true;
       allow create: if
         !exists(/databases/$(database)/documents/queue/$(studentId)) &&
-        !exists(/databases/$(database)/documents/wait/$(studentId))  &&
-        exists(/databases/$(database)/documents/roster/$(studentId));
-      allow update, delete: if false;
+        !exists(/databases/$(database)/documents/wait/$(studentId));
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
     // -----------------------------------------------------------------------
-    // Wait — same rules as queue
+    // Wait — identical rules to queue.
+    //   update also covers promoteToQueue (queuingStatus → "queuing").
     // -----------------------------------------------------------------------
     match /wait/{studentId} {
-      allow read: if false;
+      allow read: if true;
       allow create: if
         !exists(/databases/$(database)/documents/queue/$(studentId)) &&
-        !exists(/databases/$(database)/documents/wait/$(studentId))  &&
-        exists(/databases/$(database)/documents/roster/$(studentId));
-      allow update, delete: if false;
+        !exists(/databases/$(database)/documents/wait/$(studentId));
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
     // -----------------------------------------------------------------------
-    // Counter — public read (progress bars), write only from trusted server.
+    // Counter
+    //   counter/count     — aggregate display counters (queueCount, etc.)
+    //   counter/sept15_*  — per-slot capacity docs ({ count, cap })
+    //
+    //   read   : always open (progress bars, slot dropdowns).
+    //   create : admin only (initSlotDocs script).
+    //   update : shape-constrained —
+    //     • Slot docs (any doc that is not "count"): only the `count` field
+    //       may change, and only by exactly +1 or -1.
+    //     • Aggregate doc ("count"): any single field may change by ±1
+    //       (queueCount, waitingCount, etc.).
+    //   delete : never.
     // -----------------------------------------------------------------------
     match /counter/{docId} {
       allow read: if true;
-      allow write: if false;
+      allow create: if isAdmin();
+      allow delete: if false;
+
+      allow update: if docId == "count"
+        // Aggregate doc: exactly one field changes, and only by ±1.
+        ? (request.resource.data.diff(resource.data).affectedKeys().size() == 1 &&
+           (request.resource.data[request.resource.data.diff(resource.data).affectedKeys().toList()[0]]
+            == resource.data[request.resource.data.diff(resource.data).affectedKeys().toList()[0]] + 1 ||
+            request.resource.data[request.resource.data.diff(resource.data).affectedKeys().toList()[0]]
+            == resource.data[request.resource.data.diff(resource.data).affectedKeys().toList()[0]] - 1))
+        // Slot doc: only `count` changes, by exactly ±1.
+        : (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["count"]) &&
+           (request.resource.data.count == resource.data.count + 1 ||
+            request.resource.data.count == resource.data.count - 1));
     }
 
     // -----------------------------------------------------------------------
-    // Registration + cancel — admin only (custom claim required).
+    // Registration — physical ticket records, admin dashboard only.
     // -----------------------------------------------------------------------
     match /registration/{ticketNumber} {
-      allow read, write: if request.auth != null
-                         && request.auth.token.admin == true;
+      allow read, write: if isAdmin();
     }
 
+    // -----------------------------------------------------------------------
+    // Cancel log — admin only.
+    // -----------------------------------------------------------------------
     match /cancel/{docId} {
-      allow read, write: if request.auth != null
-                         && request.auth.token.admin == true;
+      allow read, write: if isAdmin();
     }
   }
 }

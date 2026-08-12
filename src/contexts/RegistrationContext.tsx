@@ -19,6 +19,8 @@ import {
   CollectionDate,
   QUEUE_COLLECTION,
   WAITLIST_COLLECTION,
+  MAX_QUEUE,
+  MAX_WAIT,
 } from "@/lib/eventConfig";
 
 // Derived from eventConfig — add/remove dates there, not here
@@ -82,8 +84,8 @@ export const RegistrationProvider: React.FC<{ children: React.ReactNode }> = ({
         if (snap.exists()) {
           const d = snap.data() as CounterDataType;
           setCounterData(d);
-          setQueueLimit(d.queueCount >= 1350);
-          setWaitLimit(d.waitingCount >= 500);
+          setQueueLimit(d.queueCount >= MAX_QUEUE);
+          setWaitLimit(d.waitingCount >= MAX_WAIT);
         }
       },
     );

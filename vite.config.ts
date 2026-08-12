@@ -3,7 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   resolve: {
     alias: {
@@ -13,10 +13,10 @@ export default defineConfig({
   esbuild: {
     // Strip all console.* and debugger statements in production.
     // Development builds keep them so you can still debug locally.
-    drop: process.env.NODE_ENV === "production" ? ["console", "debugger"] : [],
+    drop: mode === "production" ? ["console", "debugger"] : [],
   },
   build: {
     // Raise warning threshold slightly — we'll bring it down with WebP assets.
     chunkSizeWarningLimit: 600,
   },
-});
+}));
